@@ -1,106 +1,92 @@
 # -*- coding: utf-8 -*-
-from __future__ import absolute_import
-from Acquisition import aq_inner
-from redturtle.conditionedclassicportlet import _
-from plone import schema
-from plone.app.portlets.portlets import base
-from plone.memoize.instance import memoize
-from plone.portlets.interfaces import IPortletDataProvider
+from Products.CMFCore.Expression import Expression, getExprContext
 from Products.Five.browser.pagetemplatefile import ViewPageTemplateFile
-from z3c.form import field
-from zope.component import getMultiAdapter
+from Products.Five.browser.pagetemplatefile import ViewPageTemplateFile
+from plone.app.portlets import PloneMessageFactory as _
+from plone.app.portlets.portlets import base
+from plone.app.portlets.portlets.classic import AddForm as baseAddForm
+from plone.app.portlets.portlets.classic import EditForm as baseEditForm
+from plone.app.portlets.portlets.classic import IClassicPortlet
+from plone.app.portlets.portlets.classic import Renderer as baseRenderer
+from plone.portlets.interfaces import IPortletDataProvider
+from redturtle.conditionedclassicportlet import _
+from zope import schema
 from zope.interface import implementer
-
-import json
-import six.moves.urllib.request, six.moves.urllib.parse, six.moves.urllib.error
-import six.moves.urllib.request, six.moves.urllib.error, six.moves.urllib.parse
+import six
 
 
-class IConditionedclassicportletPortlet(IPortletDataProvider):
-    place_str = schema.TextLine(
-        title=_(u'Name of your place with country code'),
-        description=_(u'City name along with country code i.e Delhi,IN'),  # NOQA: E501
+class ITalesConditionedClassicPortletPortlet(IClassicPortlet):
+    tales_expression = schema.TextLine(
+        title=_(u'Write a tales expression to calculate portlet availability'),
+        description=_(u'This field is evaluated as expression'),
         required=True,
-        default=u'delhi,in'
+        default=u'python: True'
     )
 
 
-@implementer(IConditionedclassicportletPortlet)
+@implementer(ITalesConditionedClassicPortletPortlet)
 class Assignment(base.Assignment):
-    schema = IConditionedclassicportletPortlet
+    schema = ITalesConditionedClassicPortletPortlet
 
-    def __init__(self, place_str='delhi,in'):
-        self.place_str = place_str.lower()
+    def __init__(self, template='', macro='', tales_expression=''):
+        self.template = template
+        self.macro = macro
+        self.tales_expression = tales_expression
+
 
     @property
     def title(self):
-        return _(u'Weather of the place')
+        return _(u'Tales conditioned static portlet: {}'.format(self.data.tales_expression))
 
-
-class AddForm(base.AddForm):
-    schema = IConditionedclassicportletPortlet
-    form_fields = field.Fields(IConditionedclassicportletPortlet)
-    label = _(u'Add Place weather')
-    description = _(u'This portlet displays weather of the place.')
+class AddForm(baseAddForm):
+    schema = ITalesConditionedClassicPortletPortlet
+    label = _(u"Add Conditioned Classic Portlet")
+    description = _(u"A classic portlet allows you to use legacy portlet "
+                    u"templates.")
 
     def create(self, data):
-        return Assignment(
-            place_str=data.get('place_str', 'delhi,in'),
-        )
+        return Assignment(template=data.get('template', ''),
+                          macro=data.get('macro', ''),
+                          tales_expression=data.get('tales_expression', ''))
 
 
-class EditForm(base.EditForm):
-    schema = IConditionedclassicportletPortlet
-    form_fields = field.Fields(IConditionedclassicportletPortlet)
-    label = _(u'Edit Place weather')
-    description = _(u'This portlet displays weather of the place.')
+class EditForm(baseEditForm):
+    schema = ITalesConditionedClassicPortletPortlet
+    label = _(u"Edit Conditioned Classic Portlet")
+    description = _(u"A classic portlet allows you to use legacy portlet "
+                    u"templates.")
 
 
-class Renderer(base.Renderer):
-    schema = IConditionedclassicportletPortlet
+class Renderer(baseRenderer):
     _template = ViewPageTemplateFile('conditionedclassicportlet.pt')
 
     def __init__(self, *args):
         base.Renderer.__init__(self, *args)
-        context = aq_inner(self.context)
-        portal_state = getMultiAdapter(
-            (context, self.request),
-            name=u'plone_portal_state'
-        )
-        self.anonymous = portal_state.anonymous()
 
     def render(self):
         return self._template()
 
+    def get_expression(self, context, expression_string, **kwargs):
+        """ Get TALES expression
+
+        :param context: [required] TALES expression context
+        :param string expression_string: [required] TALES expression string
+        :param dict kwargs: additional arguments for expression
+        :returns: result of TALES expression
+        """
+        if six.PY2 and isinstance(expression_string, six.text_type):
+            expression_string = expression_string.encode("utf-8")
+
+        expression_context = getExprContext(context, context)
+        for key in kwargs:
+            expression_context.setGlobal(key, kwargs[key])
+        expression = Expression(expression_string)
+        return expression(expression_context)
+
     @property
     def available(self):
-        """Show the portlet only if there are one or more elements and
-        not an anonymous user."""
-        return not self.anonymous and self._data()
+        portlet_expression = self.data.tales_expression
+        expression_value = self.get_expression(self.context, portlet_expression)
+        print(expression_value)
+        return expression_value
 
-    def weather_report(self):
-        self.result = self._data()
-        return self.result['description']
-
-    def get_humidity(self):
-        return self.result['humidity']
-
-    def get_pressure(self):
-        return self.result['pressure']
-
-    @memoize
-    def _data(self):
-        baseurl = 'https://query.yahooapis.com/v1/public/yql?'
-        yql_query = 'select * from weather.forecast where woeid in (select woeid from geo.places(1) where text="{0}")'.format(  # NOQA: E501
-            self.data.place_str,
-        )
-        yql_url = baseurl + six.moves.urllib.parse.urlencode(
-            {'q': yql_query},
-        ) + '&format=json'
-        result = six.moves.urllib.request.urlopen(yql_url).read()
-        data = json.loads(result)
-        result = {}
-        result['description'] = data['query']['results']['channel']['description']  # NOQA: E501
-        result['pressure'] = data['query']['results']['channel']['atmosphere']['pressure']  # NOQA: E501
-        result['humidity'] = data['query']['results']['channel']['atmosphere']['humidity']  # NOQA: E501
-        return result

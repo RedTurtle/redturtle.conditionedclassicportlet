@@ -5,11 +5,9 @@
 
   <include package="plone.app.portlets" />
 
-  <!-- '-*- extra stuff goes here -*-' -->
-
   <plone:portlet
-    name="redturtle.conditionedclassicportlet.portlets.Conditionedclassicportlet"
-    interface=".conditionedclassicportlet.IConditionedclassicportletPortlet"
+    name="redturtle.conditionedclassicportlet.Conditionedclassicportlet"
+    interface=".conditionedclassicportlet.ITalesConditionedClassicPortletPortlet"
     assignment=".conditionedclassicportlet.Assignment"
     renderer=".conditionedclassicportlet.Renderer"
     addview=".conditionedclassicportlet.AddForm"

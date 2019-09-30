@@ -5,7 +5,7 @@
   <!-- Extra portlets here  -->
 
   <portlet
-    addview="redturtle.conditionedclassicportlet.portlets.Conditionedclassicportlet"
+    addview="redturtle.conditionedclassicportlet.Conditionedclassicportlet"
     title="ConditionedClassicPortlet"
     description="A portlet which can render weather of the given place."
     i18n:attributes="title title_conditionedclassicportlet;
